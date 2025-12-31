@@ -1,0 +1,137 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int       @id @default(autoincrement())
+  username     String    @unique
+  password     String
+  name         String
+  role         String    // ADMIN, CAPTAIN, EMPLOYEE
+  department   String    // DRIVER, MAINTENANCE, ENGINEERING, EQUIPMENT
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  schedules    Schedule[]
+  performances Performance[] @relation("UserPerformance")
+  auditedPerformances Performance[] @relation("AuditorPerformance")
+  attendances  Attendance[]
+  leaveRequests LeaveRequest[] @relation("UserLeave")
+  approvedLeaves LeaveRequest[] @relation("ApproverLeave")
+  incidents      Incident[]     @relation("UserIncident")
+  approvedIncidents Incident[]  @relation("ApproverIncident")
+}
+
+model Incident {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  user        User     @relation("UserIncident", fields: [userId], references: [id])
+  
+  // Content
+  description String?  // 文字描述 (手写转文字或直接输入)
+  voiceText   String?  // 语音识别转换的文字
+  
+  // Location & Time
+  location    String?  // 自动获取的地点
+  latitude    Float?
+  longitude   Float?
+  incidentTime DateTime @default(now()) // 事件发生时间
+
+  // Status & Workflow
+  status      String   @default("DRAFT") // DRAFT(草稿), PENDING_CAPTAIN(待队长批), PENDING_ADMIN(待管理批), APPROVED(已归档), REJECTED(驳回)
+  
+  // Approval
+  approverId  Int?
+  approver    User?    @relation("ApproverIncident", fields: [approverId], references: [id])
+  captainComment String?
+  adminComment   String?
+
+  attachments Attachment[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Attachment {
+  id         Int      @id @default(autoincrement())
+  incidentId Int
+  incident   Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  type       String   // AUDIO (录音), PHOTO (照片), VIDEO (视频), HANDWRITING (手写图)
+  url        String   // 文件路径
+  createdAt  DateTime @default(now())
+}
+
+model Route {
+  id            Int      @id @default(autoincrement())
+  name          String   // e.g., "早班101", "102交路"
+  code          String   // e.g., "101"
+  standardHours Float    // 标准工时
+  standardKm    Float    // 标准公里数
+  description   String?
+  schedules     Schedule[]
+}
+
+model Schedule {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  date      DateTime
+  shiftType String   // MORNING, DAY, NIGHT, OFF
+  status    String   // DUTY, STANDBY, LEAVE
+  
+  // 交路与工时信息
+  routeId     Int?
+  route       Route?   @relation(fields: [routeId], references: [id])
+  customRouteName String? // New field for custom route name
+  workHours   Float    @default(0)
+  kilometers  Float    @default(0)
+  leaveType   String?  // ANNUAL (年假), CASUAL (事假), SICK (病假), LEGAL (法定节假日)
+  
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Performance {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation("UserPerformance", fields: [userId], references: [id])
+  date      DateTime
+  score     Float
+  comment   String?
+  auditorId Int
+  auditor   User     @relation("AuditorPerformance", fields: [auditorId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model Attendance {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  type      String   // CHECK_IN, CHECK_OUT
+  timestamp DateTime @default(now())
+  location  String?
+}
+
+model LeaveRequest {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation("UserLeave", fields: [userId], references: [id])
+  type      String   // SICK, CASUAL, ANNUAL, LEGAL
+  startDate DateTime
+  endDate   DateTime
+  reason    String
+  status    String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  approverId Int?
+  approver  User?    @relation("ApproverLeave", fields: [approverId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
